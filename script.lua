@@ -1,5 +1,5 @@
 -- ============================================================
--- Violence District prdctn
+-- Violence District ESP
 -- ============================================================
 print("MoonLight: Dasha v1.2.1 Loading...")
 task.wait(3.59)
@@ -300,13 +300,14 @@ local function setupESP(plr)
 	corner(off, 30)
 	objs.offScreen = off
 
+	-- ⚡ BillboardGui теперь в playerGui, а не в screenGui
 	local dn = Instance.new("BillboardGui")
 	dn.Name = "ESP_DName"
 	dn.Size = UDim2.new(0, 200, 0, 20)
 	dn.StudsOffset = Vector3.new(0, 3.2, 0)
 	dn.AlwaysOnTop = true
 	dn.Enabled = false
-	dn.Parent = screenGui
+	dn.Parent = playerGui
 	local dnL = Instance.new("TextLabel")
 	dnL.Size = UDim2.new(1, 0, 1, 0)
 	dnL.BackgroundTransparency = 1
@@ -324,7 +325,7 @@ local function setupESP(plr)
 	un.StudsOffset = Vector3.new(0, 2.9, 0)
 	un.AlwaysOnTop = true
 	un.Enabled = false
-	un.Parent = screenGui
+	un.Parent = playerGui
 	local unL = Instance.new("TextLabel")
 	unL.Size = UDim2.new(1, 0, 1, 0)
 	unL.BackgroundTransparency = 1
@@ -342,7 +343,7 @@ local function setupESP(plr)
 	av.StudsOffset = Vector3.new(0, 4.5, 0)
 	av.AlwaysOnTop = true
 	av.Enabled = false
-	av.Parent = screenGui
+	av.Parent = playerGui
 	local avImg = Instance.new("ImageLabel")
 	avImg.Size = UDim2.new(1, 0, 1, 0)
 	avImg.BackgroundTransparency = 1
@@ -528,7 +529,7 @@ end
 -- ============================================================
 screenGui = Instance.new("ScreenGui")
 screenGui.Name = "ScreenGui"
-screenGui.ResetOnSpawn = false    -- ⚡ ФИКС: GUI не удаляется при смерти
+screenGui.ResetOnSpawn = false
 screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 screenGui.Parent = playerGui
 
@@ -1102,10 +1103,30 @@ stroke(ConfirmButton, Color3.fromRGB(100, 100, 100), 1.5, 0.75, Enum.ApplyStroke
 
 CloseScript.MouseButton1Click:Connect(function() ExitWindow.Visible = true end)
 StayButton.MouseButton1Click:Connect(function() ExitWindow.Visible = false end)
+
+-- ⚡ Улучшенная очистка при Confirm
 ConfirmButton.MouseButton1Click:Connect(function()
-	for _, h in pairs(highlights) do h:Destroy() end
-	for _, o in pairs(espObjects) do
-		for _, v in pairs(o) do
+	for _, h in pairs(highlights) do
+		if h and typeof(h) == "Instance" then
+			pcall(function() h:Destroy() end)
+		end
+	end
+	highlights = {}
+
+	-- Добить все ESP_Highlight на персонажах
+	for _, plr in ipairs(Players:GetPlayers()) do
+		local char = plr.Character
+		if char then
+			for _, obj in ipairs(char:GetChildren()) do
+				if obj:IsA("Highlight") and obj.Name == "ESP_Highlight" then
+					pcall(function() obj:Destroy() end)
+				end
+			end
+		end
+	end
+
+	for _, objs in pairs(espObjects) do
+		for _, v in pairs(objs) do
 			if typeof(v) == "Instance" then v:Destroy()
 			elseif type(v) == "table" then
 				for _, v2 in pairs(v) do
@@ -1114,8 +1135,48 @@ ConfirmButton.MouseButton1Click:Connect(function()
 			end
 		end
 	end
+	espObjects = {}
+
 	screenGui:Destroy()
 end)
+
+-- ⚡ Авто-очистка при уничтожении GUI (X экзекутора, кик, рестарт)
+if screenGui then
+	screenGui.Destroying:Connect(function()
+		for plr, h in pairs(highlights) do
+			if h and typeof(h) == "Instance" and h.Parent then
+				pcall(function() h:Destroy() end)
+			end
+		end
+		highlights = {}
+
+		for _, plr in ipairs(Players:GetPlayers()) do
+			local char = plr.Character
+			if char then
+				for _, obj in ipairs(char:GetChildren()) do
+					if obj:IsA("Highlight") and obj.Name == "ESP_Highlight" then
+						pcall(function() obj:Destroy() end)
+					end
+				end
+			end
+		end
+
+		for _, objs in pairs(espObjects) do
+			for _, v in pairs(objs) do
+				if typeof(v) == "Instance" then
+					pcall(function() v:Destroy() end)
+				elseif type(v) == "table" then
+					for _, v2 in pairs(v) do
+						if typeof(v2) == "Instance" then
+							pcall(function() v2:Destroy() end)
+						end
+					end
+				end
+			end
+		end
+		espObjects = {}
+	end)
+end
 
 -- ============================================================
 -- COLOR PICKER
@@ -1773,5 +1834,32 @@ UserInputService.InputBegan:Connect(function(input, processed)
 	if processed then return end
 	if input.KeyCode == Enum.KeyCode.Insert then
 		toggleMainWindow()
+	end
+end)
+
+-- ============================================================
+-- ⚡ CURSOR TOGGLE (клавиша B) — свободный курсор во время игры
+-- ============================================================
+local cursorUnlocked = false
+
+RunService.RenderStepped:Connect(function()
+	if cursorUnlocked then
+		UserInputService.MouseIconEnabled = true
+		UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+	end
+end)
+
+UserInputService.InputBegan:Connect(function(input, processed)
+	if processed then return end
+	if input.KeyCode == Enum.KeyCode.B then
+		cursorUnlocked = not cursorUnlocked
+
+		if cursorUnlocked then
+			UserInputService.MouseIconEnabled = true
+			UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+		else
+			UserInputService.MouseIconEnabled = false
+			UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
+		end
 	end
 end)
