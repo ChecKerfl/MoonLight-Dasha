@@ -1,7 +1,7 @@
 -- ============================================================
 -- Violence District
 -- ============================================================
-print("MoonLight: Successful connection to http server: https://raw.githubusercontent.com/ChecKerfl/MoonLight-Dasha/refs/heads/main/script.lua")
+print("MoonLight: Successful connection to Http server: ")
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
@@ -60,6 +60,8 @@ local TOGGLE_LOCKED = Color3.fromRGB(70, 70, 70)
 local TOGGLE_KNOB_ON_POS  = UDim2.new(0, 16, 0, 1)
 local TOGGLE_KNOB_OFF_POS = UDim2.new(0, 1, 0, 1)
 local TWEEN_INFO = TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+
+local LOCKED_COLOR = Color3.fromRGB(120, 120, 120)   -- ⚡ серый цвет для заблокированных
 
 -- ============================================================
 -- HELPERS
@@ -299,7 +301,6 @@ local function setupESP(plr)
 	corner(off, 30)
 	objs.offScreen = off
 
-	-- DisplayName
 	local dn = Instance.new("BillboardGui")
 	dn.Name = "ESP_DName"
 	dn.Size = UDim2.new(0, 200, 0, 20)
@@ -322,7 +323,6 @@ local function setupESP(plr)
 	objs.dName = dn
 	objs.dNameLabel = dnL
 
-	-- UserName
 	local un = Instance.new("BillboardGui")
 	un.Name = "ESP_UName"
 	un.Size = UDim2.new(0, 200, 0, 20)
@@ -345,7 +345,6 @@ local function setupESP(plr)
 	objs.uName = un
 	objs.uNameLabel = unL
 
-	-- Avatar
 	local av = Instance.new("BillboardGui")
 	av.Name = "ESP_Avatar"
 	av.Size = UDim2.new(0, 50, 0, 50)
@@ -385,7 +384,11 @@ RunService.RenderStepped:Connect(function()
 		local hrp  = char and char:FindFirstChild("HumanoidRootPart")
 		local head = char and char:FindFirstChild("Head")
 
-		if hrp then
+		-- ⚡ Master check: если выключен Killer/Players ESP — не рисуем ничего
+		local isK = isKiller(plr)
+		local masterOn = isK and config.killerESP or config.playersESP
+
+		if hrp and masterOn then
 			local cfg = getConfigFor(plr)
 
 			local rootPos = hrp.Position
@@ -545,7 +548,6 @@ screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 screenGui.DisplayOrder = 2147483647
 screenGui.IgnoreGuiInset = true
 
--- ⚡ Прячем GUI в защищённый контейнер экзекутора
 local function getProtectedContainer()
 	if gethui then
 		local ok, hui = pcall(gethui)
@@ -561,7 +563,6 @@ if protectgui then
 	pcall(protectgui, screenGui)
 end
 
--- ⚡ Монитор: возвращаем GUI, если игра его выкинула
 task.spawn(function()
 	while task.wait(0.3) do
 		if screenGui and not screenGui.Parent then
@@ -619,14 +620,14 @@ visIndicator.Parent = VisualsButton
 corner(visIndicator, 6)
 local visStroke = stroke(VisualsButton, Color3.fromRGB(100, 100, 100), 1.5, 0.75, Enum.ApplyStrokeMode.Border)
 
--- Settings tab
+-- Settings tab (заблокирована — серый + воскл. знак)
 local SettingsButton = Instance.new("TextButton")
 SettingsButton.Size = UDim2.new(0, 90, 0, 30)
 SettingsButton.Position = UDim2.new(0, 5, 0, 85)
 SettingsButton.BackgroundColor3 = Color3.fromRGB(170, 170, 170)
 SettingsButton.BackgroundTransparency = 1
-SettingsButton.Text = "    Settings"
-SettingsButton.TextColor3 = Color3.fromRGB(120, 120, 120)
+SettingsButton.Text = "    Settings!"
+SettingsButton.TextColor3 = LOCKED_COLOR
 SettingsButton.TextSize = 14
 SettingsButton.FontFace = font(14)
 SettingsButton.TextXAlignment = Enum.TextXAlignment.Left
@@ -849,14 +850,20 @@ local ESPRenderPanel = makePanel(VisualsScrollingFrame, "ESPRenderPanel", 178, 0
 local ESP_Render = makeLabel(ESPRenderPanel, "ESP_Render", "   ESP Render", 0, 0, 14, Color3.fromRGB(200, 200, 200))
 ESP_Render.Size = UDim2.new(0, 160, 0, 25)
 
-makeLabel(ESPRenderPanel, "Subject",   "   Subject",   5, 25)
-makeLabel(ESPRenderPanel, "Box",       "   Box",       5, 50)
-makeLabel(ESPRenderPanel, "Off_Screen","   Off Screen",5, 75)
-makeLabel(ESPRenderPanel, "Tracer",    "   Tracer",    5, 100)
-makeLabel(ESPRenderPanel, "Skeleton",  "   Skeleton",  5, 125)
-makeLabel(ESPRenderPanel, "DName",     "   DName",     5, 150)
-makeLabel(ESPRenderPanel, "UName",     "   UName",     5, 175)
-makeLabel(ESPRenderPanel, "Avatar",    "   Avatar",    5, 200)
+makeLabel(ESPRenderPanel, "Subject",   "   Subject",    5, 25)
+
+-- ⚡ Заблокированные функции — серый + воскл. знак
+makeLabel(ESPRenderPanel, "Box",       "   Box!",        5, 50,  14, LOCKED_COLOR)
+makeLabel(ESPRenderPanel, "Off_Screen","   Off Screen!", 5, 75,  14, LOCKED_COLOR)
+makeLabel(ESPRenderPanel, "Tracer",    "   Tracer!",     5, 100, 14, LOCKED_COLOR)
+makeLabel(ESPRenderPanel, "Skeleton",  "   Skeleton!",   5, 125, 14, LOCKED_COLOR)
+
+-- DName — НЕ заблокирован, обычный цвет
+makeLabel(ESPRenderPanel, "DName",     "   DName",       5, 150)
+
+-- ⚡ Заблокированные
+makeLabel(ESPRenderPanel, "UName",     "   UName!",      5, 175, 14, LOCKED_COLOR)
+makeLabel(ESPRenderPanel, "Avatar",    "   Avatar!",     5, 200, 14, LOCKED_COLOR)
 
 -- Subject switch
 local subjToggle = Instance.new("Frame")
@@ -1147,7 +1154,6 @@ stroke(ConfirmButton, Color3.fromRGB(100, 100, 100), 1.5, 0.75, Enum.ApplyStroke
 CloseScript.MouseButton1Click:Connect(function() ExitWindow.Visible = true end)
 StayButton.MouseButton1Click:Connect(function() ExitWindow.Visible = false end)
 
--- ⚡ Улучшенная очистка при Confirm
 ConfirmButton.MouseButton1Click:Connect(function()
 	for _, h in pairs(highlights) do
 		if h and typeof(h) == "Instance" then
@@ -1182,7 +1188,6 @@ ConfirmButton.MouseButton1Click:Connect(function()
 	screenGui:Destroy()
 end)
 
--- ⚡ Авто-очистка при уничтожении GUI
 if screenGui then
 	screenGui.Destroying:Connect(function()
 		for _, h in pairs(highlights) do
@@ -1849,6 +1854,7 @@ end
 elevateZIndex(ColorPicker, 10)
 
 print("MoonLight: Interface and kernel successful loaded")
+print("MoonLight: v1.2.9")
 
 -- ============================================================
 -- SMOOTH HIDE / SHOW + CURSOR (клавиша Insert)
@@ -1873,14 +1879,12 @@ local function toggleMainWindow()
 	mainTweening = true
 
 	if mainHidden then
-		-- Показываем GUI + включаем курсор
 		mainHidden = false
 		setCursorState(true)
 		fadePanel(Main, false, 0.10, function()
 			mainTweening = false
 		end)
 	else
-		-- Прячем GUI + выключаем курсор
 		mainHidden = true
 		setCursorState(false)
 		fadePanel(Main, true, 0.10, function()
@@ -1889,7 +1893,6 @@ local function toggleMainWindow()
 	end
 end
 
--- Держим состояние курсора каждый кадр (игра может сбрасывать)
 RunService.RenderStepped:Connect(function()
 	if cursorUnlocked then
 		UserInputService.MouseIconEnabled = true
