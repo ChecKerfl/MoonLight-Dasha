@@ -12,6 +12,7 @@ local Stats = game:GetService("Stats")
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
+local scriptActive = true
 local screenGui
 
 -- ============================================================
@@ -61,7 +62,7 @@ local TOGGLE_KNOB_ON_POS  = UDim2.new(0, 16, 0, 1)
 local TOGGLE_KNOB_OFF_POS = UDim2.new(0, 1, 0, 1)
 local TWEEN_INFO = TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
 
-local LOCKED_COLOR = Color3.fromRGB(120, 120, 120)   -- ⚡ серый цвет для заблокированных
+local LOCKED_COLOR = Color3.fromRGB(120, 120, 120)
 
 -- ============================================================
 -- HELPERS
@@ -375,6 +376,8 @@ local function setupESP(plr)
 end
 
 RunService.RenderStepped:Connect(function()
+	if not scriptActive then return end
+
 	local cam = Workspace.CurrentCamera
 	if not cam then return end
 	local viewport = cam.ViewportSize
@@ -384,7 +387,6 @@ RunService.RenderStepped:Connect(function()
 		local hrp  = char and char:FindFirstChild("HumanoidRootPart")
 		local head = char and char:FindFirstChild("Head")
 
-		-- ⚡ Master check: если выключен Killer/Players ESP — не рисуем ничего
 		local isK = isKiller(plr)
 		local masterOn = isK and config.killerESP or config.playersESP
 
@@ -563,13 +565,45 @@ if protectgui then
 	pcall(protectgui, screenGui)
 end
 
+-- ⚡ Watchdog: возвращаем GUI + восстанавливаем ESP каждый тик
 task.spawn(function()
-	while task.wait(0.3) do
+	while task.wait(0.5) do
+		if not scriptActive then break end
+
+		-- GUI
 		if screenGui and not screenGui.Parent then
 			local newContainer = getProtectedContainer()
-			pcall(function()
-				screenGui.Parent = newContainer
-			end)
+			pcall(function() screenGui.Parent = newContainer end)
+		end
+
+		-- Highlight
+		refreshAll()
+
+		-- ESP-объекты
+		for _, plr in ipairs(Players:GetPlayers()) do
+			if plr ~= player then
+				local objs = espObjects[plr]
+				local needsRebuild = false
+
+				if not objs then
+					needsRebuild = true
+				else
+					local topBox = objs.box and objs.box.Top
+					if not topBox or not topBox.Parent then
+						needsRebuild = true
+					end
+					if objs.dName and not objs.dName.Parent then
+						needsRebuild = true
+					end
+					if objs.tracer and not objs.tracer.Parent then
+						needsRebuild = true
+					end
+				end
+
+				if needsRebuild then
+					pcall(function() setupESP(plr) end)
+				end
+			end
 		end
 	end
 end)
@@ -598,6 +632,7 @@ Dasha.Parent = Main
 
 -- Visuals tab
 local VisualsButton = Instance.new("TextButton")
+VisualsButton.Name = "VisualsButton"
 VisualsButton.Size = UDim2.new(0, 90, 0, 30)
 VisualsButton.Position = UDim2.new(0, 5, 0, 50)
 VisualsButton.BackgroundColor3 = Color3.fromRGB(170, 170, 170)
@@ -620,30 +655,45 @@ visIndicator.Parent = VisualsButton
 corner(visIndicator, 6)
 local visStroke = stroke(VisualsButton, Color3.fromRGB(100, 100, 100), 1.5, 0.75, Enum.ApplyStrokeMode.Border)
 
--- Settings tab (заблокирована — серый + воскл. знак)
-local SettingsButton = Instance.new("TextButton")
-SettingsButton.Size = UDim2.new(0, 90, 0, 30)
-SettingsButton.Position = UDim2.new(0, 5, 0, 85)
-SettingsButton.BackgroundColor3 = Color3.fromRGB(170, 170, 170)
-SettingsButton.BackgroundTransparency = 1
-SettingsButton.Text = "    Settings!"
-SettingsButton.TextColor3 = LOCKED_COLOR
-SettingsButton.TextSize = 14
-SettingsButton.FontFace = font(14)
-SettingsButton.TextXAlignment = Enum.TextXAlignment.Left
-SettingsButton.BorderSizePixel = 0
-SettingsButton.AutoButtonColor = false
-SettingsButton.Parent = Main
-corner(SettingsButton, 8)
-local setIndicator = Instance.new("Frame")
-setIndicator.Size = UDim2.new(0, 3, 0, 18)
-setIndicator.Position = UDim2.new(0, 3, 0, 6)
-setIndicator.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-setIndicator.BackgroundTransparency = 1
-setIndicator.BorderSizePixel = 0
-setIndicator.Parent = SettingsButton
-corner(setIndicator, 6)
-local setStroke = stroke(SettingsButton, Color3.fromRGB(100, 100, 100), 1.5, 1, Enum.ApplyStrokeMode.Border)
+-- ============================================================
+-- TAB BUTTONS (Player! / Bot! / Misc! / Settings! — все заблокированы)
+-- ============================================================
+local function makeLockedTab(name, text, yPos)
+	local btn = Instance.new("TextButton")
+	btn.Name = name
+	btn.Size = UDim2.new(0, 90, 0, 30)
+	btn.Position = UDim2.new(0, 5, 0, yPos)
+	btn.BackgroundColor3 = Color3.fromRGB(170, 170, 170)
+	btn.BackgroundTransparency = 1
+	btn.Text = "    " .. text .. "!"
+	btn.TextColor3 = LOCKED_COLOR
+	btn.TextSize = 14
+	btn.FontFace = font(14)
+	btn.TextXAlignment = Enum.TextXAlignment.Left
+	btn.BorderSizePixel = 0
+	btn.AutoButtonColor = false
+	btn.Parent = Main
+	corner(btn, 8)
+
+	local indicator = Instance.new("Frame")
+	indicator.Name = "Indicator"
+	indicator.Size = UDim2.new(0, 3, 0, 18)
+	indicator.Position = UDim2.new(0, 3, 0, 6)
+	indicator.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+	indicator.BackgroundTransparency = 1
+	indicator.BorderSizePixel = 0
+	indicator.Parent = btn
+	corner(indicator, 6)
+
+	local str = stroke(btn, Color3.fromRGB(100, 100, 100), 1.5, 1, Enum.ApplyStrokeMode.Border)
+
+	return btn, indicator, str
+end
+
+local PlayerButton, plrIndicator, plrStroke = makeLockedTab("PlayerButton", "Player", 85)
+local BotButton, botIndicator, botStroke = makeLockedTab("BotButton", "Bot", 120)
+local MiscButton, miscIndicator, miscStroke = makeLockedTab("MiscButton", "Misc", 155)
+local SettingsButton, setIndicator, setStroke = makeLockedTab("SettingsButton", "Settings", 190)
 
 -- Close
 local CloseScript = Instance.new("ImageButton")
@@ -852,20 +902,14 @@ ESP_Render.Size = UDim2.new(0, 160, 0, 25)
 
 makeLabel(ESPRenderPanel, "Subject",   "   Subject",    5, 25)
 
--- ⚡ Заблокированные функции — серый + воскл. знак
 makeLabel(ESPRenderPanel, "Box",       "   Box!",        5, 50,  14, LOCKED_COLOR)
 makeLabel(ESPRenderPanel, "Off_Screen","   Off Screen!", 5, 75,  14, LOCKED_COLOR)
 makeLabel(ESPRenderPanel, "Tracer",    "   Tracer!",     5, 100, 14, LOCKED_COLOR)
 makeLabel(ESPRenderPanel, "Skeleton",  "   Skeleton!",   5, 125, 14, LOCKED_COLOR)
-
--- DName — НЕ заблокирован, обычный цвет
 makeLabel(ESPRenderPanel, "DName",     "   DName",       5, 150)
-
--- ⚡ Заблокированные
 makeLabel(ESPRenderPanel, "UName",     "   UName!",      5, 175, 14, LOCKED_COLOR)
 makeLabel(ESPRenderPanel, "Avatar",    "   Avatar!",     5, 200, 14, LOCKED_COLOR)
 
--- Subject switch
 local subjToggle = Instance.new("Frame")
 subjToggle.Size = UDim2.new(0, 82, 0, 20)
 subjToggle.Position = UDim2.new(0, 73, 0, 27)
@@ -972,7 +1016,6 @@ local tSk, sSk = makeToggle(ESPRenderPanel, TOGGLE_OFF, 120, 127, currentCfg().s
 	function(v) currentCfg().skeleton.enabled = v end, true)
 regToggle("skeleton", tSk, sSk)
 
--- DName — НЕ заблокирован
 local tDN, sDN = makeToggle(ESPRenderPanel, TOGGLE_OFF, 120, 152, currentCfg().dName.enabled,
 	function(v) currentCfg().dName.enabled = v end)
 regToggle("dName", tDN, sDN)
@@ -1155,6 +1198,15 @@ CloseScript.MouseButton1Click:Connect(function() ExitWindow.Visible = true end)
 StayButton.MouseButton1Click:Connect(function() ExitWindow.Visible = false end)
 
 ConfirmButton.MouseButton1Click:Connect(function()
+	-- ⚡ Ставим флаг "мёртв" — все циклы и хендлеры с этого момента игнорируются
+	scriptActive = false
+
+	-- Возвращаем курсор в нормальное состояние Roblox
+	pcall(function()
+		UserInputService.MouseIconEnabled = false
+		UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
+	end)
+
 	for _, h in pairs(highlights) do
 		if h and typeof(h) == "Instance" then
 			pcall(function() h:Destroy() end)
@@ -1175,21 +1227,36 @@ ConfirmButton.MouseButton1Click:Connect(function()
 
 	for _, objs in pairs(espObjects) do
 		for _, v in pairs(objs) do
-			if typeof(v) == "Instance" then v:Destroy()
+			if typeof(v) == "Instance" then
+				pcall(function() v:Destroy() end)
 			elseif type(v) == "table" then
 				for _, v2 in pairs(v) do
-					if typeof(v2) == "Instance" then v2:Destroy() end
+					if typeof(v2) == "Instance" then
+						pcall(function() v2:Destroy() end)
+					end
 				end
 			end
 		end
 	end
 	espObjects = {}
 
-	screenGui:Destroy()
+	pcall(function()
+		if screenGui then screenGui:Destroy() end
+	end)
+
+	pcall(function()
+		if Main then Main.Visible = false end
+	end)
 end)
 
 if screenGui then
 	screenGui.Destroying:Connect(function()
+		scriptActive = false
+		pcall(function()
+			UserInputService.MouseIconEnabled = false
+			UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
+		end)
+
 		for _, h in pairs(highlights) do
 			if h and typeof(h) == "Instance" and h.Parent then
 				pcall(function() h:Destroy() end)
@@ -1666,6 +1733,8 @@ end)
 
 task.spawn(function()
 	while task.wait(0.25) do
+		if not scriptActive then break end
+
 		fpsLbl.Text = "fps: " .. currentFPS
 		fpsLbl.TextColor3 = getFPSColor(currentFPS)
 
@@ -1690,6 +1759,8 @@ end)
 local activeDrags = {}
 
 RunService.RenderStepped:Connect(function(dt)
+	if not scriptActive then return end
+
 	for target, data in pairs(activeDrags) do
 		if not target.Parent then
 			activeDrags[target] = nil
@@ -1787,6 +1858,7 @@ end)
 
 UserInputService.InputBegan:Connect(function(input, processed)
 	if processed then return end
+	if not scriptActive then return end
 	if input.UserInputType ~= Enum.UserInputType.MouseButton1
 		and input.UserInputType ~= Enum.UserInputType.Touch then return end
 	if not ColorPicker.Visible then return end
@@ -1827,10 +1899,6 @@ player.CharacterAdded:Connect(function()
 	refreshAll()
 end)
 
-task.spawn(function()
-	while task.wait(1) do refreshAll() end
-end)
-
 -- ============================================================
 -- INIT
 -- ============================================================
@@ -1854,7 +1922,6 @@ end
 elevateZIndex(ColorPicker, 10)
 
 print("MoonLight: Interface and kernel successful loaded")
-print("MoonLight: v1.2.9")
 
 -- ============================================================
 -- SMOOTH HIDE / SHOW + CURSOR (клавиша Insert)
@@ -1894,6 +1961,7 @@ local function toggleMainWindow()
 end
 
 RunService.RenderStepped:Connect(function()
+	if not scriptActive then return end
 	if cursorUnlocked then
 		UserInputService.MouseIconEnabled = true
 		UserInputService.MouseBehavior = Enum.MouseBehavior.Default
@@ -1902,6 +1970,7 @@ end)
 
 UserInputService.InputBegan:Connect(function(input, processed)
 	if processed then return end
+	if not scriptActive then return end
 	if input.KeyCode == Enum.KeyCode.Insert then
 		toggleMainWindow()
 	end
